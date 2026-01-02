@@ -15,7 +15,6 @@
             }
         }
         
-        // Inisialisasi tema sebelum konten dimuat untuk mencegah flickering
         const savedTheme = localStorage.getItem('theme_obat');
         if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
@@ -65,19 +64,16 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useMemo } = React;
 
-        // Komponen Ikon Manual untuk menjamin sinkronisasi visual tanpa delay library
         const ThemeIcon = ({ isDark }) => {
             if (isDark) {
-                // Ikon Matahari (Sun)
                 return (
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-400">
                         <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
                     </svg>
                 );
             }
-            // Ikon Bulan (Moon)
             return (
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600">
                     <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
@@ -93,9 +89,7 @@
         const App = () => {
             const [user, setUser] = useState(null);
             const [logs, setLogs] = useState([]);
-            const [isDarkMode, setIsDarkMode] = useState(() => {
-                return document.documentElement.classList.contains('dark');
-            });
+            const [isDarkMode, setIsDarkMode] = useState(() => document.documentElement.classList.contains('dark'));
             const [loading, setLoading] = useState(true);
             const [searchTerm, setSearchTerm] = useState('');
             
@@ -106,7 +100,23 @@
                 medicines: [{ type: '', qty: '' }]
             });
 
-            // Sinkronisasi Tema ke DOM dan LocalStorage
+            // Kalkulasi Total Per Jenis Obat
+            const medicineTotals = useMemo(() => {
+                const totals = {};
+                logs.forEach(log => {
+                    if (log.medicines) {
+                        log.medicines.forEach(med => {
+                            const name = med.type.trim().toUpperCase();
+                            const qty = parseInt(med.qty) || 0;
+                            if (name) {
+                                totals[name] = (totals[name] || 0) + qty;
+                            }
+                        });
+                    }
+                });
+                return Object.entries(totals).sort((a, b) => b[1] - a[1]);
+            }, [logs]);
+
             useEffect(() => {
                 if (isDarkMode) {
                     document.documentElement.classList.add('dark');
@@ -184,11 +194,7 @@
                                 <h1 className="text-xl font-bold">Log Farmasi Diare</h1>
                             </div>
                             <div className="flex gap-2">
-                                <button 
-                                    onClick={() => setIsDarkMode(!isDarkMode)} 
-                                    className="p-2.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-90"
-                                    title={isDarkMode ? "Aktifkan Mode Terang" : "Aktifkan Mode Gelap"}
-                                >
+                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-90">
                                     <ThemeIcon isDark={isDarkMode} />
                                 </button>
                                 <button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all">
@@ -199,21 +205,20 @@
                     </nav>
 
                     <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        <aside className="no-print lg:col-span-5">
+                        {/* Kolom Kiri: Form */}
+                        <aside className="no-print lg:col-span-4">
                             <div className="bg-white dark:bg-[#16191c] p-7 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-xl transition-colors">
                                 <h2 className="text-xl font-bold mb-6 text-emerald-600 flex items-center gap-2">
-                                    <Icon name="file-text" /> Form Penggunaan Obat
+                                    <Icon name="file-text" /> Input Baru
                                 </h2>
                                 <form onSubmit={handleSubmit} className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tanggal</label>
-                                            <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none text-slate-900 dark:text-white" required />
-                                        </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">No. Rekam Medis</label>
-                                            <input type="text" placeholder="RM-" value={formData.recordNumber} onChange={e => setFormData({...formData, recordNumber: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none text-slate-900 dark:text-white" required />
-                                        </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tanggal</label>
+                                        <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none text-slate-900 dark:text-white" required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">No. RM</label>
+                                        <input type="text" placeholder="RM-" value={formData.recordNumber} onChange={e => setFormData({...formData, recordNumber: e.target.value})} className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none text-slate-900 dark:text-white" required />
                                     </div>
                                     <div className="space-y-1">
                                         <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Nama Pasien</label>
@@ -222,70 +227,91 @@
 
                                     <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
                                         <div className="flex justify-between items-center">
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Daftar Obat & Jumlah</label>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase">Daftar Obat</label>
                                             <button type="button" onClick={addMedicineField} className="text-[10px] font-bold text-emerald-600 hover:underline flex items-center gap-1">
-                                                <Icon name="plus-circle" size={14} /> Tambah Obat
+                                                <Icon name="plus-circle" size={14} /> Tambah
                                             </button>
                                         </div>
                                         
                                         {formData.medicines.map((med, idx) => (
-                                            <div key={idx} className="flex gap-2 items-center group">
-                                                <input type="text" placeholder="Nama Obat" value={med.type} onChange={e => updateMedicine(idx, 'type', e.target.value)} className="flex-grow px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border-none outline-none focus:ring-2 ring-emerald-500 text-slate-900 dark:text-white" required />
-                                                <input type="number" placeholder="Qty" value={med.qty} onChange={e => updateMedicine(idx, 'qty', e.target.value)} className="w-20 px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 border-none outline-none focus:ring-2 ring-emerald-500 text-slate-900 dark:text-white" required />
+                                            <div key={idx} className="flex gap-2 items-center">
+                                                <input type="text" placeholder="Nama Obat" value={med.type} onChange={e => updateMedicine(idx, 'type', e.target.value)} className="flex-grow px-3 py-2 text-sm rounded-lg bg-slate-100 dark:bg-slate-800 border-none outline-none focus:ring-1 ring-emerald-500 text-slate-900 dark:text-white" required />
+                                                <input type="number" placeholder="Qty" value={med.qty} onChange={e => updateMedicine(idx, 'qty', e.target.value)} className="w-16 px-3 py-2 text-sm rounded-lg bg-slate-100 dark:bg-slate-800 border-none outline-none focus:ring-1 ring-emerald-500 text-slate-900 dark:text-white" required />
                                                 {formData.medicines.length > 1 && (
-                                                    <button type="button" onClick={() => removeMedicineField(idx)} className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
-                                                        <Icon name="x" size={18} />
+                                                    <button type="button" onClick={() => removeMedicineField(idx)} className="text-slate-400 hover:text-rose-500">
+                                                        <Icon name="trash-2" size={16} />
                                                     </button>
                                                 )}
                                             </div>
                                         ))}
                                     </div>
 
-                                    <button type="submit" className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-lg mt-6 transition-all active:scale-[0.98]">
-                                        Simpan Transaksi
+                                    <button type="submit" className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg mt-4 transition-all">
+                                        Simpan
                                     </button>
                                 </form>
                             </div>
                         </aside>
 
-                        <section className="lg:col-span-7 space-y-4">
-                            <div className="no-print bg-white dark:bg-[#16191c] p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 transition-colors">
-                                <h2 className="font-bold flex items-center gap-2">Riwayat Penggunaan <span className="text-xs bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 px-2 py-0.5 rounded-full">{logs.length}</span></h2>
-                                <div className="relative w-full md:w-64">
-                                    <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                    <input type="text" placeholder="Cari..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-[#0b0e11] rounded-xl outline-none border-none focus:ring-1 ring-emerald-500 text-slate-900 dark:text-white" />
+                        {/* Kolom Kanan: Riwayat & Ringkasan */}
+                        <section className="lg:col-span-8 space-y-6">
+                            {/* Ringkasan Akumulasi (FITUR BARU) */}
+                            <div className="bg-white dark:bg-[#16191c] p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm transition-colors">
+                                <h3 className="text-sm font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
+                                    <Icon name="trending-up" size={16} /> Total Pengeluaran Obat Keseluruhan
+                                </h3>
+                                <div className="flex flex-wrap gap-3">
+                                    {medicineTotals.length > 0 ? medicineTotals.map(([name, total]) => (
+                                        <div key={name} className="flex items-center bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 px-4 py-2 rounded-2xl shadow-sm">
+                                            <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400">{name}</span>
+                                            <span className="ml-3 bg-emerald-600 text-white text-xs font-black px-2.5 py-1 rounded-full min-w-[30px] text-center">
+                                                {total}
+                                            </span>
+                                        </div>
+                                    )) : (
+                                        <p className="text-xs text-slate-400 italic">Belum ada data untuk dihitung</p>
+                                    )}
                                 </div>
                             </div>
 
+                            {/* Daftar Log */}
                             <div className="space-y-4">
-                                {loading ? (
-                                    <div className="py-20 text-center animate-pulse text-slate-400 italic">Menyinkronkan Cloud...</div>
-                                ) : filteredLogs.length > 0 ? filteredLogs.map(l => (
-                                    <div key={l.id} className="card-item bg-white dark:bg-[#16191c] p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4 transition-all">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h3 className="font-bold text-lg text-slate-900 dark:text-white">{l.patientName}</h3>
-                                                <div className="flex gap-2 text-[10px] font-bold text-slate-400 uppercase mt-1">
-                                                    <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded">{l.recordNumber}</span>
-                                                    <span>{new Date(l.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
-                                                </div>
-                                            </div>
-                                            <button onClick={async () => { if(confirm("Hapus data ini?")) window.FB_OBAT.deleteDoc(window.FB_OBAT.doc(window.FB_OBAT.db, "obat_diare", l.id)) }} className="no-print p-2 text-slate-300 hover:text-rose-500 transition-colors">
-                                                <Icon name="trash-2" />
-                                            </button>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            {l.medicines && l.medicines.map((m, i) => (
-                                                <div key={i} className="flex items-center bg-slate-50 dark:bg-[#0b0e11] px-4 py-2 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                                                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{m.type}</span>
-                                                    <span className="ml-3 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{m.qty}</span>
-                                                </div>
-                                            ))}
-                                        </div>
+                                <div className="no-print bg-white dark:bg-[#16191c] p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 transition-colors">
+                                    <h2 className="font-bold">Riwayat Pasien <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full ml-1">{logs.length}</span></h2>
+                                    <div className="relative w-full md:w-64">
+                                        <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input type="text" placeholder="Cari Pasien/RM..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-[#0b0e11] rounded-xl outline-none border-none focus:ring-1 ring-emerald-500 text-slate-900 dark:text-white" />
                                     </div>
-                                )) : (
-                                    <div className="py-20 text-center text-slate-400 italic border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2rem]">Belum ada riwayat penggunaan obat</div>
-                                )}
+                                </div>
+
+                                <div className="space-y-4">
+                                    {loading ? (
+                                        <div className="py-10 text-center animate-pulse text-slate-400 italic">Menyinkronkan Cloud...</div>
+                                    ) : filteredLogs.map(l => (
+                                        <div key={l.id} className="card-item bg-white dark:bg-[#16191c] p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-4">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <h3 className="font-bold text-lg text-slate-900 dark:text-white">{l.patientName}</h3>
+                                                    <div className="flex gap-2 text-[10px] font-bold text-slate-400 uppercase mt-1">
+                                                        <span className="text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded">{l.recordNumber}</span>
+                                                        <span>{new Date(l.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                                    </div>
+                                                </div>
+                                                <button onClick={async () => { if(confirm("Hapus data ini?")) window.FB_OBAT.deleteDoc(window.FB_OBAT.doc(window.FB_OBAT.db, "obat_diare", l.id)) }} className="no-print p-2 text-slate-200 hover:text-rose-500 transition-colors">
+                                                    <Icon name="trash-2" />
+                                                </button>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                {l.medicines && l.medicines.map((m, i) => (
+                                                    <div key={i} className="flex items-center bg-slate-50 dark:bg-[#0b0e11] px-4 py-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                                                        <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">{m.type}</span>
+                                                        <span className="ml-3 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{m.qty}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         </section>
                     </main>
