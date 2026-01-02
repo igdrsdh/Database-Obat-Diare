@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Obat Diare - RS Dian Husada</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Jost', 'Google Sans', 'sans-serif'] },
+                }
+            }
+        }
+    </script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;700&family=Jost:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white !important; color: black !important; }
+            .card-item { border: 1px solid #eee !important; margin-bottom: 10px; padding: 10px; break-inside: avoid; }
+        }
+        .print-only { display: none; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-[#0b0e11] text-slate-900 dark:text-slate-100 transition-colors duration-300">
+    <div id="root"></div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Menggunakan konfigurasi Firebase Anda yang sama
+        const firebaseConfig = {
+            apiKey: "AIzaSyA0HNTB7x7siB9Ps4cT5MRPhPSw7In5NaY",
+            authDomain: "data-pasien-hiv.firebaseapp.com",
+            projectId: "data-pasien-hiv",
+            storageBucket: "data-pasien-hiv.firebasestorage.app",
+            messagingSenderId: "770845270634",
+            appId: "1:770845270634:web:63e2f522a00d20534fe013"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        window.FB_OBAT = { auth, db, collection, doc, addDoc, deleteDoc, onSnapshot, query, signInAnonymously, onAuthStateChanged };
+    </script>
+
+    <!-- React & Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const Icon = ({ name, size = 20, className = "" }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+            return <i data-lucide={name} className={className} style={{ width: size, height: size }}></i>;
+        };
+
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [logs, setLogs] = useState([]);
+            const [isDarkMode, setIsDarkMode] = useState(() => localStorage.getItem('theme_obat') === 'dark');
+            const [loading, setLoading] = useState(true);
+            const [searchTerm, setSearchTerm] = useState('');
+            
+            // State form sesuai permintaan
+            const [formData, setFormData] = useState({
+                date: new Date().toISOString().split('T')[0],
+                patientName: '',
+                recordNumber: '',
+                medicineType: '',
+                quantity: ''
+            });
+
+            useEffect(() => {
+                const checkFB = setInterval(() => {
+                    if (window.FB_OBAT) {
+                        clearInterval(checkFB);
+                        const { auth, signInAnonymously, onAuthStateChanged } = window.FB_OBAT;
+                        signInAnonymously(auth).catch(console.error);
+                        onAuthStateChanged(auth, (u) => setUser(u));
+                    }
+                }, 100);
+            }, []);
+
+            useEffect(() => {
+                if (!user || !window.FB_OBAT) return;
+                const { db, collection, onSnapshot } = window.FB_OBAT;
+
+                // Menggunakan koleksi berbeda: 'obat_diare'
+                const q = collection(db, "obat_diare");
+                
+                const unsubscribe = onSnapshot(q, (snapshot) => {
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    // Urutkan berdasarkan tanggal terbaru
+                    setLogs(data.sort((a, b) => new Date(b.date) - new Date(a.date)));
+                    setLoading(false);
+                }, (err) => {
+                    console.error("Firestore Error:", err);
+                    setLoading(false);
+                });
+
+                return () => unsubscribe();
+            }, [user]);
+
+            useEffect(() => {
+                if (isDarkMode) document.documentElement.classList.add('dark');
+                else document.documentElement.classList.remove('dark');
+                localStorage.setItem('theme_obat', isDarkMode ? 'dark' : 'light');
+            }, [isDarkMode]);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!user || !window.FB_OBAT) return;
+                const { db, collection, addDoc } = window.FB_OBAT;
+
+                try {
+                    await addDoc(collection(db, "obat_diare"), {
+                        ...formData,
+                        createdAt: Date.now()
+                    });
+                    setFormData({
+                        date: new Date().toISOString().split('T')[0],
+                        patientName: '',
+                        recordNumber: '',
+                        medicineType: '',
+                        quantity: ''
+                    });
+                } catch (err) { alert("Error: " + err.message); }
+            };
+
+            const handleDelete = async (id) => {
+                if (!confirm("Hapus catatan penggunaan obat ini?")) return;
+                const { db, doc, deleteDoc } = window.FB_OBAT;
+                await deleteDoc(doc(db, "obat_diare", id));
+            };
+
+            const filteredLogs = logs.filter(l => 
+                l.patientName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                l.recordNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                l.medicineType.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+
+            return (
+                <div className="min-h-screen pb-10">
+                    <nav className="no-print sticky top-0 z-50 backdrop-blur-lg bg-white/80 dark:bg-[#0f1113]/80 border-b border-slate-200 dark:border-slate-800 px-6 py-4">
+                        <div className="max-w-7xl mx-auto flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-600 rounded-lg text-white shadow-lg shadow-emerald-500/30">
+                                    <Icon name="pill" />
+                                </div>
+                                <div>
+                                    <h1 className="text-xl font-bold text-slate-900 dark:text-white leading-none">Log Obat Diare</h1>
+                                    <p className="text-[10px] text-emerald-500 font-bold uppercase mt-1">Farmasi Dian Husada</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                    {isDarkMode ? <Icon name="sun" className="text-yellow-400" /> : <Icon name="moon" className="text-emerald-600" />}
+                                </button>
+                                <button onClick={() => window.print()} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all">
+                                    <Icon name="printer" size={16} /> Cetak
+                                </button>
+                            </div>
+                        </div>
+                    </nav>
+
+                    <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+                        {/* Form Section */}
+                        <aside className="no-print lg:col-span-4">
+                            <div className="bg-white dark:bg-[#16191c] p-7 rounded-[2.5rem] shadow-sm border border-slate-200 dark:border-slate-800 sticky top-24">
+                                <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-emerald-600">
+                                    <Icon name="clipboard-list" /> Input Penggunaan
+                                </h2>
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase">Tanggal Pemberian</label>
+                                        <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full px-5 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none" required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase">Nama Pasien</label>
+                                        <input type="text" placeholder="..." value={formData.patientName} onChange={e => setFormData({...formData, patientName: e.target.value})} className="w-full px-5 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none" required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase">Nomor Rekam Medis</label>
+                                        <input type="text" placeholder="RM-" value={formData.recordNumber} onChange={e => setFormData({...formData, recordNumber: e.target.value})} className="w-full px-5 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none" required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase">Jenis Obat</label>
+                                        <input type="text" placeholder="E.g. Oralit / Zinc" value={formData.medicineType} onChange={e => setFormData({...formData, medicineType: e.target.value})} className="w-full px-5 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none" required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-bold text-slate-400 ml-1 uppercase">Jumlah (Qty)</label>
+                                        <input type="number" placeholder="0" value={formData.quantity} onChange={e => setFormData({...formData, quantity: e.target.value})} className="w-full px-5 py-3 rounded-xl bg-slate-50 dark:bg-[#0b0e11] border-none focus:ring-2 ring-emerald-500 outline-none" required />
+                                    </div>
+                                    <button type="submit" disabled={!user} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-lg active:scale-95 transition-all disabled:opacity-50 mt-4">
+                                        {user ? 'Simpan Data Obat' : 'Menghubungkan...'}
+                                    </button>
+                                </form>
+                            </div>
+                        </aside>
+
+                        {/* List Section */}
+                        <section className="lg:col-span-8 space-y-4">
+                            <div className="no-print flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-[#16191c] p-6 rounded-[2rem] border border-slate-200 dark:border-slate-800">
+                                <h2 className="font-bold text-lg flex items-center gap-2">
+                                    Riwayat Obat <span className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 text-[10px] px-2 py-0.5 rounded-full">{logs.length}</span>
+                                </h2>
+                                <div className="relative w-full md:w-64">
+                                    <Icon name="search" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                    <input type="text" placeholder="Cari Nama/RM/Obat..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-[#0b0e11] rounded-xl outline-none border-none focus:ring-1 ring-emerald-500" />
+                                </div>
+                            </div>
+
+                            <div className="print-only text-center py-8">
+                                <h1 className="text-2xl font-bold uppercase">Laporan Penggunaan Obat Diare</h1>
+                                <p className="text-slate-500">RS DIAN HUSADA - Farmasi</p>
+                                <div className="h-0.5 bg-black w-full my-4"></div>
+                            </div>
+
+                            <div className="space-y-3">
+                                {loading ? (
+                                    <div className="p-20 text-center animate-pulse text-slate-400">Sinkronisasi Cloud...</div>
+                                ) : filteredLogs.length > 0 ? filteredLogs.map(l => (
+                                    <div key={l.id} className="card-item bg-white dark:bg-[#16191c] p-5 rounded-3xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm hover:border-emerald-500/30 transition-all">
+                                        <div className="flex gap-4 items-center">
+                                            <div className="hidden sm:flex flex-col items-center justify-center bg-slate-50 dark:bg-[#0b0e11] w-16 h-16 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(l.date).toLocaleDateString('id-ID', { month: 'short' })}</span>
+                                                <span className="text-xl font-bold leading-none">{new Date(l.date).getDate()}</span>
+                                            </div>
+                                            <div>
+                                                <div className="font-bold text-lg leading-tight">{l.patientName}</div>
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                                                    <span className="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded uppercase">{l.recordNumber}</span>
+                                                    <span className="text-xs text-slate-400 flex items-center gap-1"><Icon name="calendar" size={12} /> {l.date}</span>
+                                                </div>
+                                                <div className="mt-3 flex items-center gap-2">
+                                                    <span className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg text-sm font-semibold">
+                                                        {l.medicineType}
+                                                    </span>
+                                                    <span className="bg-emerald-600 text-white px-2 py-1 rounded-lg text-[10px] font-bold">
+                                                        Qty: {l.quantity}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button onClick={() => handleDelete(l.id)} className="no-print p-3 text-slate-300 hover:text-rose-500 transition-colors self-end sm:self-center">
+                                            <Icon name="trash-2" size={20} />
+                                        </button>
+                                    </div>
+                                )) : (
+                                    <div className="py-20 text-center text-slate-400 italic">Belum ada riwayat penggunaan obat</div>
+                                )}
+                            </div>
+                        </section>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
