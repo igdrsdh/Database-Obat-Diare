@@ -15,8 +15,7 @@
             }
         }
         
-        // IDENTITAS VERSI APLIKASI
-        const APP_VERSION = "1.0.8"; 
+        const APP_VERSION = "1.0.9"; 
 
         const savedTheme = localStorage.getItem('theme_obat');
         if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -28,20 +27,33 @@
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;700&family=Jost:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        /* EKSTRIM PRINT OPTIMIZATION */
+        /* EKSTRIM PRINT OPTIMIZATION - FIXED MARGINS */
         @media print {
-            @page { margin: 0.5cm; size: A4; }
+            @page { margin: 1.5cm; size: A4; }
             .no-print { display: none !important; }
             .print-only { display: block !important; }
-            body { background: white !important; color: black !important; font-size: 8.5pt; line-height: 1.2; }
+            body { background: white !important; color: black !important; font-size: 10pt; line-height: 1.4; }
             main { display: block !important; padding: 0 !important; margin: 0 !important; }
             section { width: 100% !important; margin: 0 !important; padding: 0 !important; }
             .scroll-area-custom { height: auto !important; overflow: visible !important; }
-            .print-table { display: table !important; width: 100%; border-collapse: collapse; margin-top: 10px; }
-            .print-table th, .print-table td { border: 0.5pt solid #ccc; padding: 4px 6px; text-align: left; vertical-align: middle; }
-            .print-table th { background: #f0f0f0 !important; font-weight: bold; text-transform: uppercase; font-size: 8pt; }
-            .medicines-list { display: flex; flex-wrap: wrap; gap: 4px; }
-            .med-tag { border: 0.5pt solid #ddd; padding: 1px 4px; border-radius: 2px; font-size: 7.5pt; }
+            
+            .print-table { 
+                display: table !important; 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-top: 20px;
+                table-layout: fixed; /* Mencegah kolom meluap */
+            }
+            .print-table th, .print-table td { 
+                border: 1pt solid #333; 
+                padding: 8px 10px; 
+                text-align: left; 
+                vertical-align: top;
+                word-wrap: break-word; /* Mencegah teks bertumpuk */
+            }
+            .print-table th { background: #f0f0f0 !important; font-weight: bold; text-transform: uppercase; font-size: 9pt; }
+            .medicines-list { display: flex; flex-direction: column; gap: 2px; }
+            .med-tag { font-size: 9pt; }
         }
         
         .print-only { display: none; }
@@ -52,7 +64,6 @@
         .dark .scroll-area-custom::-webkit-scrollbar-thumb { background: #334155; }
         .scroll-area-custom::-webkit-scrollbar-thumb:hover { background: #10b981; }
 
-        /* Animasi Slide Down untuk Notifikasi Update */
         @keyframes slideDown {
             from { transform: translateY(-100%); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
@@ -66,7 +77,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyA0HNTB7x7siB9Ps4cT5MRPhPSw7In5NaY",
@@ -82,7 +93,7 @@
         const db = getFirestore(app);
 
         window.FB_OBAT = { 
-            auth, db, collection, doc, addDoc, deleteDoc, 
+            auth, db, collection, doc, addDoc, updateDoc, deleteDoc, 
             onSnapshot, signInWithEmailAndPassword, onAuthStateChanged, signOut 
         };
     </script>
@@ -108,6 +119,7 @@
             const [appLoading, setAppLoading] = useState(true);
             const [searchTerm, setSearchTerm] = useState('');
             const [hasUpdate, setHasUpdate] = useState(false);
+            const [editingId, setEditingId] = useState(null);
             
             const [formData, setFormData] = useState({
                 date: new Date().toISOString().split('T')[0],
@@ -116,25 +128,17 @@
                 medicines: [{ type: '', qty: '' }]
             });
 
-            // LOGIKA AUTO-UPDATE: Cek Versi di Background
             useEffect(() => {
                 const checkUpdates = async () => {
                     try {
-                        // Mengambil konten file index.html itu sendiri dari server
                         const res = await fetch(window.location.href, { cache: 'no-store' });
                         const text = await res.text();
-                        // Mencari string APP_VERSION di dalam file
                         const match = text.match(/const APP_VERSION = "(.*?)";/);
                         if (match && match[1] !== APP_VERSION) {
-                            console.log(`Versi baru tersedia: ${match[1]}`);
                             setHasUpdate(true);
                         }
-                    } catch (e) {
-                        console.error("Gagal mengecek update repository", e);
-                    }
+                    } catch (e) { console.error(e); }
                 };
-
-                // Cek setiap 1 menit (60000ms)
                 const interval = setInterval(checkUpdates, 60000);
                 checkUpdates();
                 return () => clearInterval(interval);
@@ -181,18 +185,48 @@
             const handleSubmit = async (e) => {
                 e.preventDefault();
                 try {
-                    await window.FB_OBAT.addDoc(window.FB_OBAT.collection(window.FB_OBAT.db, "obat_diare"), {
-                        ...formData,
-                        createdAt: Date.now(),
-                        createdBy: user.email
-                    });
+                    if (editingId) {
+                        const docRef = window.FB_OBAT.doc(window.FB_OBAT.db, "obat_diare", editingId);
+                        await window.FB_OBAT.updateDoc(docRef, {
+                            ...formData,
+                            updatedAt: Date.now()
+                        });
+                        setEditingId(null);
+                    } else {
+                        await window.FB_OBAT.addDoc(window.FB_OBAT.collection(window.FB_OBAT.db, "obat_diare"), {
+                            ...formData,
+                            createdAt: Date.now(),
+                            createdBy: user.email
+                        });
+                    }
                     setFormData({
                         date: new Date().toISOString().split('T')[0],
                         patientName: '',
                         recordNumber: '',
                         medicines: [{ type: '', qty: '' }]
                     });
-                } catch (err) { alert("Gagal menyimpan data."); }
+                } catch (err) { alert("Gagal memproses data."); }
+            };
+
+            const startEdit = (log) => {
+                setEditingId(log.id);
+                setFormData({
+                    date: log.date,
+                    patientName: log.patientName,
+                    recordNumber: log.recordNumber,
+                    medicines: log.medicines || [{ type: '', qty: '' }]
+                });
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            };
+
+            const cancelEdit = () => {
+                setEditingId(null);
+                setFormData({
+                    date: new Date().toISOString().split('T')[0],
+                    patientName: '',
+                    recordNumber: '',
+                    medicines: [{ type: '', qty: '' }]
+                });
             };
 
             if (appLoading) return (
@@ -235,16 +269,13 @@
 
             return (
                 <div className="min-h-screen pb-10 transition-colors duration-500">
-                    {/* BANNER AUTO-UPDATE */}
                     {hasUpdate && (
                         <div className="no-print sticky top-0 z-[60] bg-indigo-600 text-white px-6 py-3 flex items-center justify-between shadow-xl animate-update">
                             <div className="flex items-center gap-3">
                                 <LucideIcon name="sparkles" size={20} className="animate-pulse" />
-                                <p className="text-xs font-bold uppercase tracking-tight">Versi Baru Tersedia di Repository!</p>
+                                <p className="text-xs font-bold uppercase tracking-tight">Versi Baru Tersedia!</p>
                             </div>
-                            <button onClick={() => window.location.reload()} className="bg-white text-indigo-600 px-4 py-1.5 rounded-full text-[10px] font-black hover:bg-slate-100 active:scale-95 transition-all">
-                                UPDATE SEKARANG
-                            </button>
+                            <button onClick={() => window.location.reload()} className="bg-white text-indigo-600 px-4 py-1.5 rounded-full text-[10px] font-black hover:bg-slate-100 active:scale-95 transition-all">UPDATE SEKARANG</button>
                         </div>
                     )}
 
@@ -274,11 +305,11 @@
                     </nav>
 
                     <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                        {/* FORM INPUT SECTION */}
                         <aside className="no-print lg:col-span-4 lg:sticky lg:top-24 space-y-6">
-                            <div className="bg-white dark:bg-[#16191c] p-8 rounded-[2.5rem] border border-slate-200 dark:border-slate-800 shadow-xl">
-                                <h2 className="text-xl font-black mb-8 text-emerald-600 flex items-center gap-3">
-                                    <LucideIcon name="plus-circle" size={24} /> Input Pemakaian Obat Antidiare
+                            <div className={`bg-white dark:bg-[#16191c] p-8 rounded-[2.5rem] border ${editingId ? 'border-amber-500 shadow-amber-500/10' : 'border-slate-200 dark:border-slate-800 shadow-xl'}`}>
+                                <h2 className={`text-xl font-black mb-8 flex items-center gap-3 ${editingId ? 'text-amber-500' : 'text-emerald-600'}`}>
+                                    <LucideIcon name={editingId ? "edit-3" : "plus-circle"} size={24} /> 
+                                    {editingId ? "Edit Data Pasien" : "Input Pemakaian Obat"}
                                 </h2>
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <div className="grid grid-cols-2 gap-4">
@@ -313,14 +344,19 @@
                                             </div>
                                         ))}
                                     </div>
-                                    <button type="submit" className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg shadow-emerald-500/10 active:scale-95 transition-all uppercase tracking-widest text-xs">Simpan Data</button>
+                                    <div className="flex flex-col gap-2">
+                                        <button type="submit" className={`w-full py-4 text-white font-black rounded-2xl shadow-lg active:scale-95 transition-all uppercase tracking-widest text-xs ${editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                            {editingId ? 'Update Perubahan' : 'Simpan Data'}
+                                        </button>
+                                        {editingId && (
+                                            <button type="button" onClick={cancelEdit} className="w-full py-3 bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold rounded-2xl text-xs uppercase">Batal Edit</button>
+                                        )}
+                                    </div>
                                 </form>
                             </div>
                         </aside>
 
-                        {/* CONTENT LIST SECTION */}
                         <section className="lg:col-span-8 space-y-4">
-                            {/* Summary Stok */}
                             <div className="bg-white dark:bg-[#16191c] p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
                                 <h3 className="text-[10px] font-black text-slate-400 uppercase mb-3 tracking-widest flex items-center gap-2">
                                     <LucideIcon name="bar-chart-2" size={14} /> Total Pengeluaran Obat
@@ -332,7 +368,6 @@
                                             <span className="text-emerald-600 font-black text-[10px]">{total}</span>
                                         </div>
                                     ))}
-                                    {medicineTotals.length === 0 && <p className="text-[10px] text-slate-400 italic">No data.</p>}
                                 </div>
                             </div>
 
@@ -349,7 +384,7 @@
                                 
                                 <div className="scroll-area-custom max-h-[600px] overflow-y-auto pr-2 space-y-3">
                                     {filteredLogs.map(l => (
-                                        <div key={l.id} className="bg-white dark:bg-[#16191c] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-4 group hover:border-emerald-500 transition-all">
+                                        <div key={l.id} className={`bg-white dark:bg-[#16191c] p-4 rounded-2xl border flex items-center justify-between gap-4 group transition-all ${editingId === l.id ? 'border-amber-500 ring-1 ring-amber-500' : 'border-slate-200 dark:border-slate-800 hover:border-emerald-500'}`}>
                                             <div className="flex-grow min-w-0">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className="text-[9px] font-black bg-emerald-600 text-white px-1.5 py-0.5 rounded uppercase tracking-tighter">{l.recordNumber}</span>
@@ -364,27 +399,25 @@
                                                     ))}
                                                 </div>
                                             </div>
-                                            <button onClick={async () => { if(confirm("Hapus data ini?")) window.FB_OBAT.deleteDoc(window.FB_OBAT.doc(window.FB_OBAT.db, "obat_diare", l.id)) }} className="text-slate-200 group-hover:text-rose-500 transition-colors p-2">
-                                                <LucideIcon name="trash-2" size={16} />
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => startEdit(l)} className="text-slate-300 hover:text-amber-500 transition-colors p-2">
+                                                    <LucideIcon name="edit-3" size={16} />
+                                                </button>
+                                                <button onClick={async () => { if(confirm("Hapus data ini?")) window.FB_OBAT.deleteDoc(window.FB_OBAT.doc(window.FB_OBAT.db, "obat_diare", l.id)) }} className="text-slate-200 hover:text-rose-500 transition-colors p-2">
+                                                    <LucideIcon name="trash-2" size={16} />
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
-                                    {filteredLogs.length === 0 && (
-                                        <div className="text-center py-10 bg-white dark:bg-[#16191c] rounded-3xl border border-dashed border-slate-200 dark:border-slate-800">
-                                            <LucideIcon name="database" className="mx-auto text-slate-200 mb-2" size={32} />
-                                            <p className="text-xs text-slate-400 font-bold uppercase">Data Kosong</p>
-                                        </div>
-                                    )}
                                 </div>
                             </div>
 
-                            {/* PRINT TABLE */}
                             <table className="print-only print-table">
                                 <thead>
                                     <tr>
-                                        <th style={{width: '40px'}}>No</th>
-                                        <th style={{width: '80px'}}>Tgl</th>
-                                        <th style={{width: '100px'}}>RM</th>
+                                        <th style={{width: '30px'}}>No</th>
+                                        <th style={{width: '85px'}}>Tgl Layanan</th>
+                                        <th style={{width: '90px'}}>No. RM</th>
                                         <th>Nama Pasien</th>
                                         <th>Obat & Jumlah</th>
                                     </tr>
@@ -393,13 +426,13 @@
                                     {filteredLogs.map((l, index) => (
                                         <tr key={l.id}>
                                             <td className="text-center">{index + 1}</td>
-                                            <td>{new Date(l.date).toLocaleDateString('id-ID', {day:'2-digit', month:'2-digit', year:'2-digit'})}</td>
+                                            <td>{new Date(l.date).toLocaleDateString('id-ID', {day:'2-digit', month:'2-digit', year:'numeric'})}</td>
                                             <td className="font-bold">{l.recordNumber}</td>
                                             <td className="uppercase font-medium">{l.patientName}</td>
                                             <td>
                                                 <div className="medicines-list">
                                                     {l.medicines?.map((m, i) => (
-                                                        <span key={i} className="med-tag">{m.type} ({m.qty})</span>
+                                                        <div key={i} className="med-tag">• {m.type} ({m.qty})</div>
                                                     ))}
                                                 </div>
                                             </td>
@@ -410,8 +443,8 @@
                         </section>
                     </main>
 
-                    <footer className="print-only text-[8px] text-center mt-4 text-slate-400 border-t pt-2">
-                        Dokumen dicetak dari Sistem Farmasi Digital RS Dian Husada | Build {APP_VERSION}
+                    <footer className="print-only text-[10px] text-center mt-10 text-slate-500 border-t pt-4">
+                        Dicetak pada: {new Date().toLocaleString('id-ID')} | Sistem Log Antidiare RS Dian Husada | v{APP_VERSION}
                     </footer>
                 </div>
             );
@@ -422,4 +455,3 @@
     </script>
 </body>
 </html>
-
